@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="origin">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>[현장공유방/리매뉴얼] GPS 현장공유 통합 대시보드</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+ body, html { margin: 0; padding: 0; height: 100%; background: #111; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+ header { padding: 8px 12px; background: #000; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; flex-wrap: wrap; gap: 6px; }
+ .hdr-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+ .cat-select { background: #222; color: #ffc107; border: 1px solid #ffc107; border-radius: 6px; padding: 4px 8px; font-size: 12px; font-weight: bold; }
+ .main-wrap { flex: 1; display: flex; flex-direction: row; overflow: hidden; position: relative; }
+ #photos-wrap { flex: 0 0 50%; display: flex; flex-direction: row; overflow: hidden; min-width: 12%; min-height: 12%; }
+ .img-pane { flex: 1; background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; touch-action: none; border-bottom: 1px solid #222; border-right: 1px solid #222; }
+ #split-bar { flex: 0 0 14px; background: #1b1b1b; border-left: 1px solid #3a3a3a; border-right: 1px solid #3a3a3a; display: flex; align-items: center; justify-content: center; cursor: col-resize; touch-action: none; user-select: none; z-index: 500; }
+ #split-bar .grip { width: 4px; height: 44px; background: #ffc107; border-radius: 4px; opacity: 0.85; }
+ @media (max-width: 768px) {
+  .main-wrap { flex-direction: column; }
+  #photos-wrap { flex-direction: column; }
+  #split-bar { cursor: row-resize; border-left: none; border-right: none; border-top: 1px solid #3a3a3a; border-bottom: 1px solid #3a3a3a; }
+  #split-bar .grip { width: 44px; height: 4px; }
+ }
+ .img-pane img { max-width: 100%; max-height: 100%; object-fit: contain; transform-origin: center center; user-select: none; -webkit-user-drag: none; }
+ .pane-badge { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.75); color: #ffc107; border: 1px solid #ffc107; font-size: 11px; font-weight: bold; padding: 3px 8px; border-radius: 6px; z-index: 10; pointer-events: none; }
+ .pane-badge.after { color: #00e676; border-color: #00e676; }
+ #map-pane { flex: 1; position: relative; }
+ #thumbs { height: 82px; background: #000; display: flex; overflow-x: auto; padding: 4px; border-top: 1px solid #333; }
+ .thumb-wrap { position: relative; margin-right: 6px; flex-shrink: 0; }
+ .thumb-wrap img { width: 70px; height: 70px; object-fit: cover; border: 3px solid transparent; cursor: pointer; display: block; }
+ .thumb-wrap img.active { border-color: #ffc107; }
+ .thumb-tag { position: absolute; bottom: 3px; right: 3px; background: #00c853; color: #fff; font-size: 9px; font-weight: bold; padding: 1px 4px; border-radius: 4px; pointer-events: none; }
+</style>
+</head>
+<body>
+<header>
+ <div class="hdr-left">
+  <strong>☁️ 현장: 현장공유방/리매뉴얼 (tectura77/field-com)</strong>
+  <select id="cat-filter" class="cat-select" onchange="onFilterChange()"></select>
+  <select id="author-filter" class="cat-select" onchange="onFilterChange()"></select>
+ </div>
+ <div id="info-txt" style="width:100%; font-size:15px; font-weight:bold; color:#ffc107; line-height:1.35; padding-top:2px;"></div>
+</header>
+<div class="main-wrap" id="main-wrap">
+ <div id="photos-wrap">
+  <div id="photo-pane" class="img-pane">
+   <div id="before-badge" class="pane-badge" style="display:none;">조치전 사진</div>
+   <img id="main-photo" src="" alt="현장 사진"/>
+  </div>
+  <div id="after-pane" class="img-pane" style="display:none;">
+   <div class="pane-badge after">조치후 사진</div>
+   <img id="after-photo" src="" alt="조치후 사진"/>
+  </div>
+ </div>
+ <div id="split-bar"><div class="grip"></div></div>
+ <div id="map-pane"></div>
+</div>
+<div id="thumbs"></div>
+<script>
+const photos = [{"fileName":"p_202610231349_3751409_12693611.jpg","src":"photos/p_202610231349_3751409_12693611.jpg","afterFileName":"","afterSrc":"","lat":37.514093699722224,"lng":126.93610769972223,"alt":49.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 13:49","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231349_3751405_12693629.jpg","src":"photos/p_202610231349_3751405_12693629.jpg","afterFileName":"","afterSrc":"","lat":37.514045513850164,"lng":126.93629389016813,"alt":49.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 13:49","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231305_3751801_12693896.jpg","src":"photos/p_202610231305_3751801_12693896.jpg","afterFileName":"","afterSrc":"","lat":37.51801439972222,"lng":126.9389563,"alt":31.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 13:05","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231304_3751793_12693735.jpg","src":"photos/p_202610231304_3751793_12693735.jpg","afterFileName":"","afterSrc":"","lat":37.517933999722224,"lng":126.9373506,"alt":31.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 13:04","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231246_3751901_12693197.jpg","src":"photos/p_202610231246_3751901_12693197.jpg","afterFileName":"","afterSrc":"","lat":37.5190139636589,"lng":126.93197404648753,"alt":53.8,"acc":1.0,"azimuth":315.46000000000004,"pitch":0.0,"time":"2026-10-23 12:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231246_3751882_12693202.jpg","src":"photos/p_202610231246_3751882_12693202.jpg","afterFileName":"","afterSrc":"","lat":37.518817674551755,"lng":126.93202214896179,"alt":53.8,"acc":1.0,"azimuth":114.37,"pitch":0.0,"time":"2026-10-23 12:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231246_3751895_12693208.jpg","src":"photos/p_202610231246_3751895_12693208.jpg","afterFileName":"","afterSrc":"","lat":37.51894739600239,"lng":126.93208176703169,"alt":53.8,"acc":1.0,"azimuth":7.939999999999998,"pitch":0.0,"time":"2026-10-23 12:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231245_3751885_12693207.jpg","src":"photos/p_202610231245_3751885_12693207.jpg","afterFileName":"","afterSrc":"","lat":37.51884682617243,"lng":126.93206721211627,"alt":52.9,"acc":1.0,"azimuth":214.18000000000006,"pitch":0.0,"time":"2026-10-23 12:45","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231245_3751891_12693214.jpg","src":"photos/p_202610231245_3751891_12693214.jpg","afterFileName":"","afterSrc":"","lat":37.51890640120693,"lng":126.93213714066623,"alt":52.3,"acc":1.0,"azimuth":58.76999999999998,"pitch":0.0,"time":"2026-10-23 12:45","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231245_3751892_12693210.jpg","src":"photos/p_202610231245_3751892_12693210.jpg","afterFileName":"","afterSrc":"","lat":37.51891520969277,"lng":126.93209595640622,"alt":57.3,"acc":1.0,"azimuth":74.68,"pitch":0.0,"time":"2026-10-23 12:45","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231244_3751887_12693211.jpg","src":"photos/p_202610231244_3751887_12693211.jpg","afterFileName":"","afterSrc":"","lat":37.518874026273444,"lng":126.93211292417205,"alt":58.31,"acc":1.0,"azimuth":171.13,"pitch":0.0,"time":"2026-10-23 12:44","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231144_3752441_12692983.jpg","src":"photos/p_202610231144_3752441_12692983.jpg","afterFileName":"","afterSrc":"","lat":37.524412399999996,"lng":126.92982759972223,"alt":42.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 11:44","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231144_3752445_12692985.jpg","src":"photos/p_202610231144_3752445_12692985.jpg","afterFileName":"","afterSrc":"","lat":37.5244463,"lng":126.92984749972223,"alt":39.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 11:44","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231013_3751741_12693425.jpg","src":"photos/p_202610231013_3751741_12693425.jpg","afterFileName":"","afterSrc":"","lat":37.5174128,"lng":126.9342455,"alt":42.5,"acc":1.0,"azimuth":314.19000000000005,"pitch":0.0,"time":"2026-10-23 10:13","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231004_3751769_12693283.jpg","src":"photos/p_202610231004_3751769_12693283.jpg","afterFileName":"","afterSrc":"","lat":37.51768655920625,"lng":126.9328321957848,"alt":44.93,"acc":1.0,"azimuth":60.870000000000005,"pitch":0.0,"time":"2026-10-23 10:04","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231000_3751807_12693305.jpg","src":"photos/p_202610231000_3751807_12693305.jpg","afterFileName":"","afterSrc":"","lat":37.5180733,"lng":126.93305450000001,"alt":39.9,"acc":1.0,"azimuth":176.18000000000006,"pitch":0.0,"time":"2026-10-23 10-00","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231003_3751735_12693306.jpg","src":"photos/p_202610231003_3751735_12693306.jpg","afterFileName":"","afterSrc":"","lat":37.517345974295786,"lng":126.93305974254888,"alt":41.4,"acc":1.0,"azimuth":176.54999999999995,"pitch":0.0,"time":"2026-10-23 10:03","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231000_3751809_12693306.jpg","src":"photos/p_202610231000_3751809_12693306.jpg","afterFileName":"","afterSrc":"","lat":37.5180851,"lng":126.93305910000001,"alt":39.9,"acc":1.0,"azimuth":317.43000000000006,"pitch":0.0,"time":"2026-10-23 10:00","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230950_3751891_12693166.jpg","src":"photos/p_202610230950_3751891_12693166.jpg","afterFileName":"","afterSrc":"","lat":37.5189145,"lng":126.9316568,"alt":37.57,"acc":1.0,"azimuth":328.1,"pitch":0.0,"time":"2026-10-23 09:50","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230946_3751938_12693249.jpg","src":"photos/p_202610230946_3751938_12693249.jpg","afterFileName":"","afterSrc":"","lat":37.51937539154908,"lng":126.93248738683184,"alt":46.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230946_3751936_12693242.jpg","src":"photos/p_202610230946_3751936_12693242.jpg","afterFileName":"","afterSrc":"","lat":37.51936022553683,"lng":126.93242133050134,"alt":46.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230946_3751935_12693245.jpg","src":"photos/p_202610230946_3751935_12693245.jpg","afterFileName":"","afterSrc":"","lat":37.51935484481845,"lng":126.93245054525832,"alt":51.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230943_3751828_12693345.jpg","src":"photos/p_202610230943_3751828_12693345.jpg","afterFileName":"","afterSrc":"","lat":37.5182839,"lng":126.9334517,"alt":40.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:43","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230937_3751735_12693328.jpg","src":"photos/p_202610230937_3751735_12693328.jpg","afterFileName":"","afterSrc":"","lat":37.5173495,"lng":126.93327860000001,"alt":41.8,"acc":1.0,"azimuth":268.99,"pitch":0.0,"time":"2026-10-23 09:37","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230943_3751828_12693348.jpg","src":"photos/p_202610230943_3751828_12693348.jpg","afterFileName":"","afterSrc":"","lat":37.5182798,"lng":126.93347909972222,"alt":39.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:43","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230936_3751760_12693412.jpg","src":"photos/p_202610230936_3751760_12693412.jpg","afterFileName":"","afterSrc":"","lat":37.51759567257515,"lng":126.93412235008125,"alt":46.75,"acc":1.0,"azimuth":339.53,"pitch":0.0,"time":"2026-10-23 09:36","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230936_3751746_12693427.jpg","src":"photos/p_202610230936_3751746_12693427.jpg","afterFileName":"","afterSrc":"","lat":37.5174622,"lng":126.9342737,"alt":40.9,"acc":1.0,"azimuth":250.06999999999994,"pitch":0.0,"time":"2026-10-23 09:36","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230932_3751735_12693343.jpg","src":"photos/p_202610230932_3751735_12693343.jpg","afterFileName":"","afterSrc":"","lat":37.51735374254352,"lng":126.93343335820593,"alt":39.9,"acc":1.0,"azimuth":347.71000000000004,"pitch":0.0,"time":"2026-10-23 09:32","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230933_3751741_12693366.jpg","src":"photos/p_202610230933_3751741_12693366.jpg","afterFileName":"","afterSrc":"","lat":37.5174064,"lng":126.9336609,"alt":45.9,"acc":1.0,"azimuth":20.810000000000002,"pitch":0.0,"time":"2026-10-23 09:33","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230934_3751744_12693378.jpg","src":"photos/p_202610230934_3751744_12693378.jpg","afterFileName":"after_p_202610230934_3751744_12693378.jpg","afterSrc":"photos/after_p_202610230934_3751744_12693378.jpg","lat":37.5174444,"lng":126.9337801,"alt":41.4,"acc":1.0,"azimuth":129.71000000000004,"pitch":0.0,"time":"2026-10-23 09:34","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230928_3751735_12693269.jpg","src":"photos/p_202610230928_3751735_12693269.jpg","afterFileName":"","afterSrc":"","lat":37.51734519276658,"lng":126.93269353983408,"alt":25.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:28","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230929_3751739_12693287.jpg","src":"photos/p_202610230929_3751739_12693287.jpg","afterFileName":"","afterSrc":"","lat":37.51738679187056,"lng":126.93286798656574,"alt":41.4,"acc":1.0,"azimuth":114.36000000000001,"pitch":0.0,"time":"2026-10-23 09:29","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230924_3751764_12693308.jpg","src":"photos/p_202610230924_3751764_12693308.jpg","afterFileName":"","afterSrc":"","lat":37.517637899722224,"lng":126.93307869972223,"alt":55.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:24","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230925_3751818_12693297.jpg","src":"photos/p_202610230925_3751818_12693297.jpg","afterFileName":"","afterSrc":"","lat":37.5181788,"lng":126.93297239972223,"alt":40.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:25","category":"여의도진주","memo":"ㅣㅅㆍㅅㆍㅅᆢㅅㆍㄴㆍㄴㆍㅅㆍㅅㄴㆍㄴㆍㄴㆍㄴ","author":"이경훈"},{"fileName":"p_202610230927_3751766_12693279.jpg","src":"photos/p_202610230927_3751766_12693279.jpg","afterFileName":"","afterSrc":"","lat":37.517661319497144,"lng":126.932794871116,"alt":42.5,"acc":1.0,"azimuth":42.69,"pitch":0.0,"time":"2026-10-23 09:27","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230920_3751798_12693252.jpg","src":"photos/p_202610230920_3751798_12693252.jpg","afterFileName":"","afterSrc":"","lat":37.51797705574622,"lng":126.93252122012309,"alt":39.5,"acc":1.0,"azimuth":201.65999999999997,"pitch":0.0,"time":"2026-10-23 09:20","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230924_3751768_12693304.jpg","src":"photos/p_202610230924_3751768_12693304.jpg","afterFileName":"","afterSrc":"","lat":37.5176825434999,"lng":126.93303569632008,"alt":55.0,"acc":1.0,"azimuth":-1.0,"pitch":0.0,"time":"2026-10-23 09:24","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230919_3751802_12693250.jpg","src":"photos/p_202610230919_3751802_12693250.jpg","afterFileName":"","afterSrc":"","lat":37.51801581611584,"lng":126.9325038354506,"alt":39.5,"acc":1.0,"azimuth":332.74,"pitch":0.0,"time":"2026-10-23 09:19","category":"여의도진주","memo":"ㄱㅈㄱㅊ","author":"이경훈"},{"fileName":"p_202610230919_3751800_12693263.jpg","src":"photos/p_202610230919_3751800_12693263.jpg","afterFileName":"","afterSrc":"","lat":37.51799688590957,"lng":126.93263229970891,"alt":39.6,"acc":1.0,"azimuth":60.69999999999999,"pitch":0.0,"time":"2026-10-23 09:19","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230920_3751795_12693261.jpg","src":"photos/p_202610230920_3751795_12693261.jpg","afterFileName":"","afterSrc":"","lat":37.51795301939392,"lng":126.93260627143188,"alt":39.5,"acc":1.0,"azimuth":153.49,"pitch":0.0,"time":"2026-10-23 09:20","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230917_3751858_12693196.jpg","src":"photos/p_202610230917_3751858_12693196.jpg","afterFileName":"","afterSrc":"","lat":37.51858359158287,"lng":126.93195983217757,"alt":39.3,"acc":1.0,"azimuth":231.62,"pitch":0.0,"time":"2026-10-23 09:17","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230917_3751853_12693202.jpg","src":"photos/p_202610230917_3751853_12693202.jpg","afterFileName":"","afterSrc":"","lat":37.51852681247636,"lng":126.93201994717306,"alt":39.4,"acc":1.0,"azimuth":148.91999999999996,"pitch":0.0,"time":"2026-10-23 09:17","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610231246_3751864_12693188.jpg","src":"photos/p_202610231246_3751864_12693188.jpg","afterFileName":"","afterSrc":"","lat":37.51864159545482,"lng":126.93188236909678,"alt":53.8,"acc":1.0,"azimuth":7.939999999999998,"pitch":0.0,"time":"2026-10-23 12-46","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230915_3751912_12693203.jpg","src":"photos/p_202610230915_3751912_12693203.jpg","afterFileName":"","afterSrc":"","lat":37.519124,"lng":126.9320325,"alt":39.5,"acc":1.0,"azimuth":234.93000000000006,"pitch":0.0,"time":"2026-10-23 09:15","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230915_3751911_12693207.jpg","src":"photos/p_202610230915_3751911_12693207.jpg","afterFileName":"","afterSrc":"","lat":37.51911431609935,"lng":126.932072016926,"alt":39.5,"acc":1.0,"azimuth":150.98000000000002,"pitch":0.0,"time":"2026-10-23 09:15","category":"여의도진주","memo":"","author":"이경훈"},{"fileName":"p_202610230915_3751915_12693206.jpg","src":"photos/p_202610230915_3751915_12693206.jpg","afterFileName":"","afterSrc":"","lat":37.51914907694522,"lng":126.93206250879246,"alt":39.5,"acc":1.0,"azimuth":84.42000000000002,"pitch":0.0,"time":"2026-10-23 09:15","category":"여의도진주","memo":"ㅈㄹㅉㄴㅈㄴㅈㄴㅈㄴㅈㄴㅈㄴㅊㄴㅈㄴㅈㄴㅈㄴㅊㄴㅈㄴㅈㄴㅈㄴㅊㄴㅈㄴ","author":"이경훈"},{"fileName":"p_202611031954_3749837_12713238.jpg","src":"photos/p_202611031954_3749837_12713238.jpg","afterFileName":"","afterSrc":"","lat":37.4983724,"lng":127.1323776,"alt":120.80555442470406,"acc":15.095999717712402,"azimuth":175.84307921513187,"pitch":2.408043571259172,"time":"2026-11-03 19:54","category":"여의도진주","memo":"","author":"이경훈"}];
+const bps = [{"id":"bp_1793665972159","name":"여의도진주 _지하7층","fileName":"bp_bp_1793665972159.png","src":"photos/bp_bp_1793665972159.png","lat":37.51817546636485,"lng":126.93295925885623,"swLat":37.51684095000422,"swLng":126.93127672816345,"neLat":37.51950998272548,"neLng":126.934641789549,"rotation":-37.949692533221366,"opacity":1.0,"origOpacity":0.5,"baseRadius":148.5583612654448,"sizeSlider":0.5,"isVisible":true},{"id":"bp_1793665972160","name":"여의도진주_배치도","fileName":"bp_bp_1793665972160.png","src":"photos/bp_bp_1793665972160.png","lat":37.51818968651289,"lng":126.9329522120748,"swLat":37.51688076756059,"swLng":126.93130195375183,"neLat":37.51949860546519,"neLng":126.93460247039776,"rotation":-37.64985087837745,"opacity":1.0,"origOpacity":0.5,"baseRadius":124.58015630986287,"sizeSlider":0.5712995717523941,"isVisible":false},{"id":"bp_1793665972161","name":"본사9층","fileName":"bp_bp_1793665972161.png","src":"photos/bp_bp_1793665972161.png","lat":37.56149880879525,"lng":126.82622542861358,"swLat":37.56099397765897,"swLng":126.82558857800574,"neLat":37.56200363993153,"neLng":126.82686227922143,"rotation":96.87347983983318,"opacity":1.0,"origOpacity":0.5,"baseRadius":33.4630718217425,"sizeSlider":0.735950005130815,"isVisible":false},{"id":"bp_1793881371872","name":"도면 4","fileName":"bp_bp_1793881371872.png","src":"photos/bp_bp_1793881371872.png","lat":37.617432879221695,"lng":126.92514181283944,"swLat":37.61230644727166,"swLng":126.91866989477305,"neLat":37.62255931117173,"neLng":126.93161373090584,"rotation":1.7731732319913363,"opacity":1.0,"origOpacity":0.5,"baseRadius":214.28561170366032,"sizeSlider":0.9457937883659625,"isVisible":true}];
+let filteredPhotos = photos.slice();
+let selectedIdx = 0;
+
+function resolvePhotoSrc(p) {
+ if (p.b64 && p.b64.length > 20) return p.b64;
+ if (p.src && p.src.length > 0) return p.src;
+ if (p.fileName) return 'photos/' + p.fileName;
+ return '';
+}
+function resolveAfterSrc(p) {
+ if (p.afterB64 && p.afterB64.length > 20) return p.afterB64;
+ if (p.afterSrc && p.afterSrc.length > 0) return p.afterSrc;
+ if (p.afterFileName && p.afterFileName.length > 0) return 'photos/' + p.afterFileName;
+ return '';
+}
+function resolveBpSrc(bp) {
+ if (bp.b64 && bp.b64.length > 20) return bp.b64;
+ if (bp.src && bp.src.length > 0) return bp.src;
+ if (bp.fileName) return 'photos/' + bp.fileName;
+ return '';
+}
+
+(function initFilters() {
+ const catSel = document.getElementById('cat-filter');
+ const authSel = document.getElementById('author-filter');
+ const cats = Array.from(new Set(photos.map(p => p.category || '미분류')));
+ catSel.innerHTML = '<option value="ALL">전체 카테고리 (' + photos.length + ')</option>' +
+  cats.map(c => '<option value="' + c + '">' + c + ' (' + photos.filter(p => (p.category || '미분류') === c).length + ')</option>').join('');
+ const authors = Array.from(new Set(photos.map(p => p.author || '').filter(Boolean)));
+ authSel.innerHTML = '<option value="ALL">전체 작성자</option>' +
+  authors.map(a => '<option value="' + a + '">작성자: ' + a + '</option>').join('');
+})();
+
+function onFilterChange() {
+ const c = document.getElementById('cat-filter').value;
+ const a = document.getElementById('author-filter').value;
+ filteredPhotos = photos.filter(p => {
+  const mc = (c === 'ALL') || ((p.category || '미분류') === c);
+  const ma = (a === 'ALL') || ((p.author || '') === a);
+  return mc && ma;
+ });
+ selectedIdx = 0;
+ if (filteredPhotos.length > 0) {
+  selectPhoto(0);
+ } else {
+  document.getElementById('main-photo').src = '';
+  document.getElementById('after-pane').style.display = 'none';
+  document.getElementById('thumbs').innerHTML = '';
+  markersLayer.clearLayers();
+  document.getElementById('info-txt').innerText = '선택한 조건의 사진이 없습니다.';
+ }
+}
+
+const initLat = photos.length > 0 ? photos[0].lat : (bps.length > 0 ? bps[0].lat : 37.4984);
+const initLng = photos.length > 0 ? photos[0].lng : (bps.length > 0 ? bps[0].lng : 127.1324);
+const map = L.map('map-pane', { maxZoom: 22 }).setView([initLat, initLng], 16.0);
+L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', { maxNativeZoom: 19, maxZoom: 22, attribution: '© VWorld' }).addTo(map);
+
+bps.forEach((bp) => {
+ if (bp.isVisible === false) return;
+ const bpImg = new Image();
+ bpImg.crossOrigin = 'anonymous';
+ bpImg.onload = () => {
+  const size = 900, pad = 40, inner = size - pad * 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+  ctx.rotate((bp.rotation || 0) * Math.PI / 180.0);
+  const scale = Math.min(inner / bpImg.width, inner / bpImg.height);
+  ctx.drawImage(bpImg, -(bpImg.width * scale) / 2, -(bpImg.height * scale) / 2, bpImg.width * scale, bpImg.height * scale);
+  ctx.restore();
+  const bounds = [[bp.swLat, bp.swLng], [bp.neLat, bp.neLng]];
+  L.imageOverlay(canvas.toDataURL('image/png'), bounds, { opacity: bp.origOpacity || 0.65, interactive: false }).addTo(map);
+ };
+ bpImg.src = resolveBpSrc(bp);
+});
+
+const markersLayer = L.layerGroup().addTo(map);
+function selectPhoto(idx, shouldPan = true) {
+ if (idx < 0 || idx >= filteredPhotos.length) return;
+ selectedIdx = idx;
+ const p = filteredPhotos[idx];
+ document.getElementById('main-photo').src = resolvePhotoSrc(p);
+ const afterUrl = resolveAfterSrc(p);
+ const afterPane = document.getElementById('after-pane');
+ const beforeBadge = document.getElementById('before-badge');
+ const photosWrapEl = document.getElementById('photos-wrap');
+ if (afterUrl.length > 0) {
+  document.getElementById('after-photo').src = afterUrl;
+  afterPane.style.display = 'flex';
+  beforeBadge.style.display = 'block';
+  if (photosWrapEl) photosWrapEl.style.flex = '0 0 66.6%';
+ } else {
+  afterPane.style.display = 'none';
+  beforeBadge.style.display = 'none';
+  if (photosWrapEl) photosWrapEl.style.flex = '0 0 50%';
+ }
+ setTimeout(() => map.invalidateSize(), 60);
+ const authorTag = (p.author && p.author.trim().length > 0) ? (' · 👷 ' + p.author.trim()) : '';
+ const memoClean = (p.memo && p.memo.trim().length > 0) ? (' — ' + p.memo.trim()) : '';
+ document.getElementById('info-txt').innerText = '[' + (p.category || '미분류') + authorTag + '] (' + (p.time || '') + ')' + memoClean;
+ renderThumbnails();
+ renderMarkers();
+ if (shouldPan) map.panTo([p.lat, p.lng]);
+}
+function renderThumbnails() {
+ const box = document.getElementById('thumbs');
+ box.innerHTML = '';
+ filteredPhotos.forEach((p, i) => {
+  const wrap = document.createElement('div');
+  wrap.className = 'thumb-wrap';
+  const im = document.createElement('img');
+  im.src = resolvePhotoSrc(p);
+  if (i === selectedIdx) im.className = 'active';
+  im.onclick = () => selectPhoto(i, true);
+  wrap.appendChild(im);
+  if (resolveAfterSrc(p).length > 0) {
+   const tag = document.createElement('span');
+   tag.className = 'thumb-tag';
+   tag.innerText = '조치후';
+   wrap.appendChild(tag);
+  }
+  box.appendChild(wrap);
+ });
+}
+function renderMarkers() {
+ markersLayer.clearLayers();
+ filteredPhotos.forEach((p, i) => {
+  const isSel = (i === selectedIdx);
+  const color = isSel ? '#2979ff' : '#f44336';
+  const noDir = (p.azimuth === undefined || p.azimuth < 0);
+  const htmlIcon = L.divIcon({
+   className: '',
+   iconSize: [28, 28],
+   iconAnchor: [14, 14],
+   html: '<div style="width:24px;height:24px;border-radius:50%;background:' + color + '4d;border:2px solid ' + color + ';display:flex;align-items:center;justify-content:center;' + (noDir ? '' : 'transform:rotate(' + p.azimuth + 'deg);') + '"><span style="color:' + color + ';font-size:' + (noDir ? '12px' : '14px') + ';font-weight:bold;">' + (noDir ? '●' : '▲') + '</span></div>'
+  });
+  const m = L.marker([p.lat, p.lng], { icon: htmlIcon, zIndexOffset: isSel ? 1000 : 100 }).addTo(markersLayer);
+  m.on('click', () => selectPhoto(i, false));
+ });
+}
+if (filteredPhotos.length > 0) selectPhoto(0);
+</script>
+</body>
+</html>
